@@ -1,0 +1,11 @@
+Let's build a  new app located at /home/jkcode/python/flet/ringLight3.  Using python and flet for the GUI elements.  This simple app will control an LED ring by sending commands to a microcontroller through the serial port.  The app should carefully parse and detect the correct serial port and microcontroller, a classic arduino.
+The UI will have 4 sliders, labelled White, Red, Green, Blue, to control each of the 4 colors. Slider values range from 0 to 255.  There will be 2 buttons, labelled On and Off.  The On button will use the values from the sliders to send to the microcontroller to turn on the appropriate LEDs.  The Off button will turn all the LEDs off but not alter the slider values.
+
+Here's how matlab gathers the slider values and writes the command to the microcontroller:
+cmd = sprintf("W%d,R%d,G%d,B%d", w, r, g, b);
+    writeline(s, cmd);
+So the command looks like "W100,R0,G0,B200" for example.
+
+Please create a git repository for the code.
+
+

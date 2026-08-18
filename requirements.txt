@@ -1,0 +1,2 @@
+flet[all]>=0.80,<1
+pyserial>=3.5
