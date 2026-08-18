@@ -10,8 +10,9 @@ The `if __name__ == "__main__":` block at the bottom is Python's way of saying
 
 import flet as ft
 
-from ringLight3 import main
+from ringLight3 import install_linux_taskbar_name, main
 
 
 if __name__ == "__main__":
+    install_linux_taskbar_name()
     ft.run(main)

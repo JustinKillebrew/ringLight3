@@ -19,11 +19,59 @@ Serial protocol (115200 baud, LF-terminated lines sent to Arduino):
 from __future__ import annotations
 
 import atexit
+import shlex
+import subprocess
+import sys
 import threading
+from pathlib import Path
 
 import flet as ft
 
 from arduino import BAUD_RATE, RingLight
+
+# Shown in the window title. On Linux the GNOME dock ignores this and uses
+# Flet's hardcoded WM_CLASS ("Flet") unless a matching .desktop file exists.
+APP_NAME = "RingLight Control"
+
+
+def install_linux_taskbar_name() -> None:
+    """Tell GNOME to label this window RingLight Control instead of Flet.
+
+    Flet's Linux client is a GTK app whose class is hardcoded to Flet, so
+    page.title never reaches the dock. A user .desktop file with
+    StartupWMClass=Flet is how the shell maps that window to a real name.
+    """
+    if sys.platform != "linux":
+        return
+
+    apps_dir = Path.home() / ".local/share/applications"
+    apps_dir.mkdir(parents=True, exist_ok=True)
+    script = Path(__file__).resolve()
+    exec_line = f"{shlex.quote(sys.executable)} {shlex.quote(str(script))}"
+    desktop_path = apps_dir / "ringlight-control.desktop"
+    desktop_path.write_text(
+        "\n".join(
+            [
+                "[Desktop Entry]",
+                "Type=Application",
+                f"Name={APP_NAME}",
+                "Comment=Control a WRGB NeoPixel ring over serial",
+                f"Exec={exec_line}",
+                "Terminal=false",
+                "Categories=Utility;",
+                "StartupWMClass=Flet",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    # GNOME reads this when the window appears; the updater is optional.
+    subprocess.run(
+        ["update-desktop-database", str(apps_dir)],
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
 
 
 class ColorChannel:
@@ -80,7 +128,7 @@ def main(page: ft.Page) -> None:
     `page`, `ring`, and the sliders defined in this same function, like MATLAB
     nested functions inside ringLight_GUI.
     """
-    page.title = "RingLight Control"
+    page.title = APP_NAME
     page.padding = 20
     page.window.width = 480
     page.window.height = 430
@@ -183,6 +231,7 @@ def main(page: ft.Page) -> None:
 
 
 if __name__ == "__main__":
+    install_linux_taskbar_name()
     # Newer Flet uses ft.run(); older builds used ft.app(target=...).
     if hasattr(ft, "run"):
         ft.run(main)
