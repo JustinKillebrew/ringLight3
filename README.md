@@ -25,15 +25,53 @@ the window also sends `OFF` and releases the port.
 
 ## Setup
 
+Linux / macOS:
+
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+Windows (PowerShell):
+
+```powershell
+py -3 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
+
 ## Usage
 
 ```bash
-source .venv/bin/activate
 python ringLight3.py
 ```
+
+On Windows, close the Arduino IDE Serial Monitor before launching. The app looks
+for official Arduino and common clone USB serial chips (CH340, FTDI, CP210x).
+
+## Windows executable
+
+`flet build windows` must be run on Windows. It cannot be cross-compiled from Linux.
+
+1. Install Python 3.10+ from python.org, and Visual Studio 2022 with the
+   **Desktop development with C++** workload (needed by Flutter).
+2. In this directory:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+flet doctor
+python ringLight3.py
+flet build windows
+```
+
+The executable is written to `build\windows\x64\runner\Release\RingLight.exe`.
+
+A quicker PyInstaller bundle (larger, no Visual Studio) is:
+
+```powershell
+flet pack main.py --name RingLight
+```
+
+That writes `dist\RingLight.exe`.
