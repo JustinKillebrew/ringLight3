@@ -58,6 +58,50 @@ def format_color_command(white: int, red: int, green: int, blue: int) -> str:
     return f"W{int(white)},R{int(red)},G{int(green)},B{int(blue)}"
 
 
+def _decode_serial_text(raw: bytes) -> str:
+    """Turn one serial read into printable text.
+
+    Classic Arduinos often emit NUL bytes while the bootloader resets.
+    """
+    return raw.decode("ascii", errors="replace").replace("\x00", "").strip()
+
+
+def _is_boot_banner(text: str) -> bool:
+    """True for the sketch's one-time 'aiNeopixels serial server ready' line."""
+    return "serial server ready" in text.lower()
+
+
+def _drain_boot_banner(ser: serial.Serial) -> None:
+    """Read and discard the ready line. Flush is not enough on Linux ACM.
+
+    Opening the port resets the Uno, and the sketch prints one banner after
+    delay(2000). The Arduino IDE Serial Monitor works because it already
+    showed that line before you type a command.
+
+    On /dev/ttyACM*, reset_input_buffer() (tcflush) often does not drop USB
+    CDC data, and in_waiting stays 0 until you actually read. So we readline
+    until we see the banner or a couple of empty timeouts.
+    """
+    old_timeout = ser.timeout
+    ser.timeout = 0.25
+    try:
+        empty = 0
+        for _ in range(20):
+            text = _decode_serial_text(ser.readline())
+            if _is_boot_banner(text):
+                return
+            if text:
+                empty = 0
+                continue
+            empty += 1
+            if empty >= 3:
+                return
+    except OSError:
+        pass
+    finally:
+        ser.timeout = old_timeout
+
+
 def _port_text(info: ListPortInfo) -> str:
     """Join all descriptive fields into one lowercase string for searching.
 
@@ -100,7 +144,8 @@ def _score_port(info: ListPortInfo) -> int | None:
     text = _port_text(info)
     vid = _vid_from_info(info)
 
-    if sys.platform.startswith("linux") and device.startswith("/dev/ttyS"):
+    # `device` is already lowercased, so built-in ttyS0 matches "/dev/ttys".
+    if sys.platform.startswith("linux") and device.startswith("/dev/ttys"):
         return None
     if "bluetooth" in text:
         return None
@@ -196,13 +241,7 @@ class RingLight:
         ser = serial.Serial(port, self.baud, timeout=1)
         # Opening the port toggles DTR and resets the Arduino; wait for boot.
         time.sleep(self.boot_delay_s)
-        ser.reset_input_buffer()
-        try:
-            # Discard the "serial server ready" banner so it does not pile up.
-            while ser.in_waiting:
-                ser.readline()
-        except OSError:
-            pass
+        _drain_boot_banner(ser)
 
         self._ser = ser
         self.port = port
@@ -215,6 +254,23 @@ class RingLight:
 
     def send_off(self) -> None:
         self._write("OFF")
+
+    def readline(self) -> str:
+        """Read one LF-terminated reply from the sketch.
+
+        ringLight.ino answers with OK, OK OFF, or ERR.
+        pyserial waits up to the port timeout (1 s). strip() removes the
+        CR/LF that Arduino Serial.println adds.
+        """
+        if self._ser is None or not self._ser.is_open:
+            raise RuntimeError("Arduino is not connected.")
+        # Skip bootloader NULs and a late ready-banner; those are not replies.
+        for _ in range(5):
+            text = _decode_serial_text(self._ser.readline())
+            if not text or _is_boot_banner(text):
+                continue
+            return text
+        return ""
 
     def close(self, send_off: bool = True) -> None:
         """Optionally send OFF, then release the port. Safe to call more than once."""
