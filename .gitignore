@@ -1,5 +1,5 @@
 .venv/
-jkenv/
+jkvenv/
 __pycache__/
 *.pyc
 *.pyo
