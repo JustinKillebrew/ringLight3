@@ -33,6 +33,26 @@ from arduino import BAUD_RATE, RingLight
 # Flet's hardcoded WM_CLASS ("Flet") unless a matching .desktop file exists.
 APP_NAME = "RingLight Control"
 
+# Circular status lamp between On and Off. Container is the Flet control for a
+# colored shape; BoxShape.CIRCLE makes it a disc rather than a rounded box.
+# The border keeps the disc visible when the fill is near-black or white.
+LAMP_SIZE = 36
+LAMP_OFF_COLOR = ft.Colors.GREY_800
+LAMP_BORDER = ft.Border.all(width=2, color=ft.Colors.GREY_700)
+
+
+def lamp_color(white: int, red: int, green: int, blue: int) -> str:
+    """Approximate NeoPixel WRGB as a display RGB hex color.
+
+    The W channel is a dedicated white LED, so add it equally to R, G, and B
+    and clamp at 255.
+    """
+    return "#{:02x}{:02x}{:02x}".format(
+        min(255, red + white),
+        min(255, green + white),
+        min(255, blue + white),
+    )
+
 
 def install_linux_taskbar_name() -> None:
     """Tell GNOME to label this window RingLight Control instead of Flet.
@@ -150,10 +170,28 @@ def main(page: ft.Page) -> None:
     # Start disabled until connect() succeeds, so On/Off cannot fire too early.
     on_button = ft.Button(content="On", width=110, height=40, disabled=True)
     off_button = ft.Button(content="Off", width=110, height=40, disabled=True)
+    lamp = ft.Container(
+        width=LAMP_SIZE,
+        height=LAMP_SIZE,
+        shape=ft.BoxShape.CIRCLE,
+        bgcolor=LAMP_OFF_COLOR,
+        border=LAMP_BORDER,
+        tooltip="Ring is off",
+    )
+
+    def set_lamp(on: bool) -> None:
+        if on:
+            lamp.bgcolor = lamp_color(white.value, red.value, green.value, blue.value)
+            lamp.tooltip = "Ring is on"
+        else:
+            lamp.bgcolor = LAMP_OFF_COLOR
+            lamp.tooltip = "Ring is off"
 
     def set_connected(connected: bool) -> None:
         on_button.disabled = not connected
         off_button.disabled = not connected
+        if not connected:
+            set_lamp(False)
 
     def set_status(message: str) -> None:
         status.value = message
@@ -186,6 +224,7 @@ def main(page: ft.Page) -> None:
             set_connected(False)
             set_status(f"Send failed: {exc}")
             return
+        set_lamp(True)
         set_status(f"Sent {cmd}")
 
     def send_off(_e) -> None:
@@ -195,6 +234,7 @@ def main(page: ft.Page) -> None:
             set_connected(False)
             set_status(f"Send failed: {exc}")
             return
+        set_lamp(False)
         set_status("Sent OFF")
 
     def cleanup(_e=None) -> None:
@@ -217,8 +257,8 @@ def main(page: ft.Page) -> None:
                 ft.Container(height=8),
                 ft.Row(
                     alignment=ft.MainAxisAlignment.CENTER,
-                    spacing=40,
-                    controls=[on_button, off_button],
+                    spacing=24,
+                    controls=[on_button, lamp, off_button],
                 ),
                 ft.Container(expand=True),  # flexible spacer above the status line
                 status,

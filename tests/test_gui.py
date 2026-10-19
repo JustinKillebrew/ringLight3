@@ -7,7 +7,15 @@ import flet as ft
 import pytest
 
 import ringLight3
-from ringLight3 import APP_NAME, ColorChannel, install_linux_taskbar_name, main
+from ringLight3 import (
+    APP_NAME,
+    LAMP_BORDER,
+    LAMP_OFF_COLOR,
+    ColorChannel,
+    install_linux_taskbar_name,
+    lamp_color,
+    main,
+)
 
 
 def _column(page: MagicMock) -> ft.Column:
@@ -21,6 +29,15 @@ def _buttons(column: ft.Column) -> tuple[ft.Button, ft.Button]:
             if len(found) == 2:
                 return found[0], found[1]
     raise AssertionError("On/Off buttons not found")
+
+
+def _lamp(column: ft.Column) -> ft.Container:
+    for control in column.controls:
+        if isinstance(control, ft.Row):
+            for child in control.controls:
+                if isinstance(child, ft.Container) and child.shape == ft.BoxShape.CIRCLE:
+                    return child
+    raise AssertionError("Status lamp not found")
 
 
 def _sliders(column: ft.Column) -> list[ft.Slider]:
@@ -78,6 +95,16 @@ def test_color_channel_on_change_updates_readout():
     channel.value_text.update.assert_called_once()
 
 
+def test_lamp_color_uses_rgb_when_white_is_zero():
+    assert lamp_color(0, 255, 0, 0) == "#ff0000"
+    assert lamp_color(0, 0, 128, 64) == "#008040"
+
+
+def test_lamp_color_adds_white_into_rgb():
+    assert lamp_color(10, 20, 30, 40) == "#1e2832"
+    assert lamp_color(255, 255, 255, 255) == "#ffffff"
+
+
 def test_color_channel_build_row_layout():
     channel = ColorChannel("White", ft.Colors.BLUE_GREY_200)
     row = channel.build_row()
@@ -131,6 +158,8 @@ def test_main_sets_window_and_starts_disconnected():
     assert page.window.height == 430
     assert on_button.disabled is True
     assert off_button.disabled is True
+    assert _lamp(column).bgcolor == LAMP_OFF_COLOR
+    assert _lamp(column).border == LAMP_BORDER
     assert _status(column).value == "Looking for Arduino..."
     ring.connect.assert_not_called()
 
@@ -144,6 +173,7 @@ def test_connect_success_enables_buttons():
     ring.connect.assert_called_once()
     assert on_button.disabled is False
     assert off_button.disabled is False
+    assert _lamp(column).bgcolor == LAMP_OFF_COLOR
     assert _status(column).value == "Connected to /dev/ttyACM0 at 115200 baud"
     page.update.assert_called()
 
@@ -171,6 +201,8 @@ def test_on_sends_slider_values():
     on_button.on_click(MagicMock())
 
     ring.send_color.assert_called_once_with(10, 20, 30, 40)
+    assert _lamp(column).bgcolor == lamp_color(10, 20, 30, 40)
+    assert _lamp(column).border == LAMP_BORDER
     assert _status(column).value == "Sent W10,R20,G30,B40"
 
 
@@ -185,6 +217,7 @@ def test_on_failure_disables_buttons():
 
     assert on_button.disabled is True
     assert off_button.disabled is True
+    assert _lamp(column).bgcolor == LAMP_OFF_COLOR
     assert _status(column).value == "Send failed: Arduino is not connected."
 
 
@@ -202,7 +235,21 @@ def test_off_sends_off_without_changing_sliders():
     ring.send_off.assert_called_once()
     ring.send_color.assert_not_called()
     assert [slider.value for slider in sliders] == [11, 22, 33, 44]
+    assert _lamp(column).bgcolor == LAMP_OFF_COLOR
     assert _status(column).value == "Sent OFF"
+
+
+def test_off_after_on_extinguishes_lamp():
+    ring = MagicMock()
+    ring.connect.return_value = "/dev/ttyACM0"
+    _page, column = launch(ring)
+    on_button, off_button = _buttons(column)
+
+    on_button.on_click(MagicMock())
+    assert _lamp(column).bgcolor == lamp_color(0, 0, 0, 0)
+
+    off_button.on_click(MagicMock())
+    assert _lamp(column).bgcolor == LAMP_OFF_COLOR
 
 
 def test_off_failure_disables_buttons():
